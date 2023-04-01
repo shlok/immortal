@@ -4,7 +4,7 @@
 -- >import qualified Control.Immortal as Immortal
 module Control.Immortal
   ( Thread
-  , create
+  , create'
   , createWithLabel
   , mortalize
   , immortalize
@@ -30,11 +30,12 @@ data Thread = Thread ThreadId (IORef Bool) (TVar Bool)
 --
 -- If the computation ever finishes (either normally or due to an exception),
 -- it will be restarted (in the same thread).
-create
+create'
   :: MonadUnliftIO m
-  => (Thread -> m ())
+  => Bool
+  -> (Thread -> m ())
   -> m Thread
-create a = withRunInIO $ \run -> uninterruptibleMask $ \restore -> do
+create' bound a = withRunInIO $ \run -> uninterruptibleMask $ \restore -> do
   -- Why use uninterruptibleMask instead of just mask? We're not using any
   -- blocking operations so far, so there should be no difference. Still,
   -- better be safe than sorry.
@@ -53,14 +54,14 @@ create a = withRunInIO $ \run -> uninterruptibleMask $ \restore -> do
         atomically $ writeTVar finishedRef True
       else
         go
-  pid <- forkIO go
+  pid <- if bound then forkOS go else forkIO go
   return $ Thread pid stopRef finishedRef
 
 -- | Like 'create', but also apply the given label to the thread
 -- (using 'labelThread').
-createWithLabel :: MonadUnliftIO m => String -> (Thread -> m ()) -> m Thread
-createWithLabel label a = do
-  thread <- create a
+createWithLabel :: MonadUnliftIO m => Bool -> String -> (Thread -> m ()) -> m Thread
+createWithLabel bound label a = do
+  thread <- create' bound a
   liftIO $ labelThread (threadId thread) label
   return thread
 
