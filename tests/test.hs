@@ -14,19 +14,19 @@ import System.Timeout
 -- See http://ro-che.info/articles/2014-07-30-bracket.html
 withImmortal :: IO () -> IO c -> IO c
 withImmortal comp inner = do
-  thread <- Immortal.create $ const comp
+  thread <- Immortal.create' False $ const comp
   inner `finally` Immortal.stop thread
 
 withImmortalThread :: (Immortal.Thread -> IO ()) -> (Immortal.Thread -> IO c) -> IO c
 withImmortalThread comp inner = do
-  thread <- Immortal.create comp
+  thread <- Immortal.create' False comp
   inner thread `finally` Immortal.stop thread
 
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testCase "is not killed by an exception" $ do
       tv <- atomically $ newTVar True
-      immortal <- Immortal.create $ const $ keepTrue tv
+      immortal <- Immortal.create' False $ const $ keepTrue tv
 
       killThread (Immortal.threadId immortal)
       atomically $ writeTVar tv False
@@ -45,7 +45,7 @@ main = defaultMain $ testGroup "Tests"
 
   , testCase "can be stopped" $ do
       tv <- atomically $ newTVar True
-      immortal <- Immortal.create $ const $ keepTrue tv
+      immortal <- Immortal.create' False $ const $ keepTrue tv
 
       Immortal.stop immortal
       atomically $ writeTVar tv False
@@ -111,7 +111,7 @@ main = defaultMain $ testGroup "Tests"
 
   , testCase "mortalize allows thread to finish" $ do
       tv <- atomically $ newTVar True
-      t <- Immortal.create $ const $ keepTrue tv
+      t <- Immortal.create' False $ const $ keepTrue tv
       Immortal.mortalize t
       atomically $ writeTVar tv False
       delay
@@ -130,7 +130,7 @@ main = defaultMain $ testGroup "Tests"
       -- this is the copy of the previous test, only after mortalize we
       -- immediately call immortalize
       tv <- atomically $ newTVar True
-      t <- Immortal.create $ const $ keepTrue tv
+      t <- Immortal.create' False $ const $ keepTrue tv
       Immortal.mortalize t
       Immortal.immortalize t
       atomically $ writeTVar tv False
@@ -148,7 +148,7 @@ main = defaultMain $ testGroup "Tests"
       -- tv2 checks that the exception was thrown
       tv1 <- atomically $ newTVar False
       tv2 <- atomically $ newTVar False
-      _ <- Immortal.create $ \thread -> do
+      _ <- Immortal.create' False $ \thread -> do
         keepTrue tv1
         Immortal.stop thread
         atomically $ writeTVar tv1 True
@@ -162,7 +162,7 @@ main = defaultMain $ testGroup "Tests"
       v2 @?= False
 
   , testCase "wait is called after the thread is stopped" $ do
-      thread <- Immortal.create $ \_ -> threadDelay maxBound
+      thread <- Immortal.create' False $ \_ -> threadDelay maxBound
       _ <- forkIO $ threadDelay (10^4) >> Immortal.stop thread
       result <- timeout (10^5) $ Immortal.wait thread
 
@@ -170,7 +170,7 @@ main = defaultMain $ testGroup "Tests"
 
   , testCase "wait waits long enough" $ do
       tv <- atomically $ newTVar True
-      thread <- Immortal.create $ \t -> do
+      thread <- Immortal.create' False $ \t -> do
         delay
         atomically $ writeTVar tv False
         Immortal.stop t
